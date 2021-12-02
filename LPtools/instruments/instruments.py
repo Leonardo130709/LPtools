@@ -34,12 +34,16 @@ class Cash:
         return self._value
 
     def step(self, state, value):
-        self.df *= np.exp(-state.risk_free_rate / 360.)
+        self.df *= np.exp(-state.risk_free_rate / 360. / 100.)
         self._value += value
         self.payments.append(value * state.risk_free_rate)
 
     def __repr__(self):
         return self._value
+
+    @property
+    def discounted_payments(self):
+        return np.sum(self.payments)
 
 
 class Bond(Instrument):
@@ -189,9 +193,11 @@ class Portfolio:
 
     @property
     def summary(self):
+        for k, v in self.logger.items():
+            if len(v) == 1:
+                print(f'{k} = {v.pop()}')
         try:
             import pandas as pd
-            #  print({k: v for k, v in self.logger.items() if len(v) == 1})
             return pd.DataFrame({k: v for k, v in self.logger.items() if len(v) == len(self.logger['payments'])})
         except ImportError:
             print('Omitting usage of pandas')
