@@ -178,7 +178,7 @@ class Portfolio:
             cash += val
 
         self.cash_pool.step(state, cash)
-        self.logger['total_value'] = [self.cash_pool.value]
+        self.logger['total_value'] = [self.cash_pool.value(state)]
 
     def rollout(self, runner):
         last_state = None
@@ -191,7 +191,7 @@ class Portfolio:
     def summary(self):
         try:
             import pandas as pd
-            print({k: v for k, v in self.logger.items() if len(v) == 1})
+            #  print({k: v for k, v in self.logger.items() if len(v) == 1})
             return pd.DataFrame({k: v for k, v in self.logger.items() if len(v) == len(self.logger['payments'])})
         except ImportError:
             print('Omitting usage of pandas')
