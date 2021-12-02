@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List
-from .instruments import Position, UniPool
+from .instruments import Position
 
 
 class BaseBalancer(ABC):
@@ -8,14 +8,12 @@ class BaseBalancer(ABC):
         self.positions = positions
 
     @abstractmethod
-    def rebalance(self, state):
+    def rebalance(self, state: 'MarketState') -> float:
         pass
 
 
-class PassivePoolHolder(BaseBalancer):
-    def __init__(self, positions):
-        assert positions.__len__() == 1 and isinstance(positions[0].instrument, UniPool)
-        super().__init__(positions)
+class Holder(BaseBalancer):
 
     def rebalance(self, state):
+        pass
         return 0

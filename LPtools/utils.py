@@ -24,6 +24,7 @@ class Adapter:
 
     def get_pool(self, days):
         df = self.client.poolDayData(self.pool_id, limit=days)
+        df['relative_price'] = df.token0Price / df.token1Price
         return df[::-1]
 
     def get_mark_prices(self, days):
