@@ -9,7 +9,9 @@ class Instrument(ABC):
 
     @abstractmethod
     def value(self, state: 'MarketState') -> float:
-        "'Fair' value of the instrument estimated from the current MarketState"
+        """
+        'Fair' value of the instrument estimated from the current MarketState
+        """
         pass
 
     @abstractmethod
@@ -36,10 +38,10 @@ class Cash:
     def step(self, state, value):
         self.df *= np.exp(-state.risk_free_rate / 360. / 100.)
         self._value += value
-        self.payments.append(value * state.risk_free_rate)
+        self.payments.append(value * self.df)  # here we can get payments
 
     def __repr__(self):
-        return self._value
+        return self._value.__repr__()
 
     @property
     def discounted_payments(self):
@@ -52,59 +54,62 @@ class Bond(Instrument):
     """
 
     def __init__(self, init_state):
-        self._value = 1 + init_state.risk_free_rate / 100. / 360.  # to percent + day rate
+        self.rate = init_state.risk_free_rate / 100. / 360.  # day rate
+        self._value = 1
 
     def value(self, state):
         return self._value
 
     def step(self, state):
-        self._value *= (1 + state.risk_free_rate / 360. / 100.)
-        return 0
+        self._value *= (1 + self.rate)
+        return 0  # no payments except on expiration
 
 
-class Perpet(Instrument):
+class Perpetual(Instrument):
 
     def value(self, state):
-        return state.relative_price
+        return state.token0Price
 
     def step(self, state):
-        return - state.fundingRate * (state.relative_price - state.mark)
+        return - state.fundingRate * (state.token0Price - state.mark)
 
 
 class UniPool(Instrument):
     tick_base = 1.0001
 
-    def __init__(self, init_state,
-                 relative_price_lower,
-                 relative_price_upper,
-                 phi=.03,
+    def __init__(self, liquidity,
+                 price_lower,
+                 price_upper,
+                 fees=.03,
                  meta: dict = None):
 
-        assert relative_price_lower < relative_price_upper
+        assert price_lower < price_upper
         # sqp stands for square root of the price
-        self.sqp_u = np.sqrt(relative_price_upper)
-        self.sqp_l = np.sqrt(relative_price_lower)
+        self.sqp_u = np.sqrt(price_upper)
+        self.sqp_l = np.sqrt(price_lower)
 
         self.tl = UniPool.sprice_to_tick(self.sqp_l)
         self.tu = UniPool.sprice_to_tick(self.sqp_u)
 
-        self.L = self.liquidity_from_mv(init_state, 1)
-        self.phi = phi  # fee
+        self.L = liquidity
+        # self.L = self.liquidity_from_mv(init_state, 1)
+        self.fees = fees  # fee
         self._meta = meta
 
     def value(self, state: dict) -> float:
         # market relative price of tokens \sim pool_value -- assumumpition of the ultimate arbitrage
         p0 = state.token0Price
-        p1 = state.token1Price
-        sqp = np.sqrt(state.relative_price)
+        sqp = np.sqrt(p0)
         t0, t1 = self._real_reserves(sqp)
-        return t0 * p1 + t1 * p1
+        return t0 * p0 + t1 * 1
 
     def step(self, state):
-        sqprice = np.sqrt(state.relative_price)
-        factor = 1 - .5*(sqprice / self.sqp_u + self.sqp_l / sqprice)
-        net_liquidity = self.L * factor
-        return state.feesUSD * (net_liquidity / state.liquidity)  # can be replaced by the exact calculation per tick
+        sqprice = np.sqrt(state.token0Price)
+        # factor = 1 - .5*(sqprice / self.sqp_u + self.sqp_l / sqprice)
+        # net_liquidity = self.L * factor
+        indicator = self.sqp_l < sqprice < self.sqp_u
+        return indicator * state.feesUSD * \
+                    (self.L / state.liquidity)  # can be replaced by the exact calculation per tick
 
     @classmethod
     def sprice_to_tick(cls, sprice):
@@ -117,8 +122,8 @@ class UniPool(Instrument):
     def _virtual_reserves(self, sprice):
         # returns: token0_amount, token1_amount
         sprice = np.clip(sprice, self.sqp_l, self.sqp_u)
-        token0 = self.L * sprice
-        token1 = self.L / sprice
+        token0 = self.L / sprice
+        token1 = self.L * sprice
         return token0, token1
 
     def _real_reserves(self, sprice):
@@ -127,7 +132,8 @@ class UniPool(Instrument):
 
     @staticmethod
     def liquidity_from_mv(state, mv):
-        sqprice = np.sqrt(state.relative_price)
+        sqprice = np.sqrt(state.token0Price)
+        # sqprice = np.clip(sqprice, self.sqp_l, self.sqp_u)
         return mv / 2. / sqprice
 
 

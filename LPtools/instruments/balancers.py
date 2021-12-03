@@ -17,3 +17,16 @@ class Holder(BaseBalancer):
     def rebalance(self, state):
         pass
         return 0
+
+
+class Hedger(BaseBalancer):
+    def __init__(self, positions, rebalance_period):
+        self.positions = positions
+        self.period = rebalance_period
+        self._t = 0
+
+    def rebalance(self, state):
+        costs = 0
+        if self._t == 0:
+            pass
+        return costs
