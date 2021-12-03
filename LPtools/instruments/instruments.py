@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import List
 from collections import defaultdict
 from dataclasses import dataclass
+import pandas as pd
 
 
 class Instrument(ABC):
@@ -23,7 +24,7 @@ class Instrument(ABC):
 
 
 class Cash:
-    def __init__(self, initial_value: float):
+    def __init__(self, initial_value: float = 0):
         self._value = initial_value
         self.payments = []
         self.df = 1
@@ -77,64 +78,53 @@ class Perpetual(Instrument):
 class UniPool(Instrument):
     tick_base = 1.0001
 
-    def __init__(self, liquidity,
+    def __init__(self, init_state,
                  price_lower,
                  price_upper,
                  fees=.03,
-                 meta: dict = None):
+                 ):
 
         assert price_lower < price_upper
         # sqp stands for square root of the price
         self.sqp_u = np.sqrt(price_upper)
         self.sqp_l = np.sqrt(price_lower)
 
-        self.tl = UniPool.sprice_to_tick(self.sqp_l)
-        self.tu = UniPool.sprice_to_tick(self.sqp_u)
-
-        self.L = liquidity
-        # self.L = self.liquidity_from_mv(init_state, 1)
+        self.L = self._liquidity_from_mv(init_state) # liquidity per 1$, it's ok since payments/values are linear in L
         self.fees = fees  # fee
-        self._meta = meta
 
-    def value(self, state: dict) -> float:
-        # market relative price of tokens \sim pool_value -- assumumpition of the ultimate arbitrage
-        p0 = state.token0Price
-        sqp = np.sqrt(p0)
-        t0, t1 = self._real_reserves(sqp)
-        return t0 * p0 + t1 * 1
+    def value(self, state):
+        # market relative price of tokens \sim pool_value -- assumption of the ultimate arbitrage
+        t0, t1 = self.virtual_reserves(state)
+        return t0*state.token0Price + t1
 
     def step(self, state):
         sqprice = np.sqrt(state.token0Price)
-        # factor = 1 - .5*(sqprice / self.sqp_u + self.sqp_l / sqprice)
-        # net_liquidity = self.L * factor
         indicator = self.sqp_l < sqprice < self.sqp_u
         return indicator * state.feesUSD * \
                     (self.L / state.liquidity)  # can be replaced by the exact calculation per tick
 
-    @classmethod
-    def sprice_to_tick(cls, sprice):
-        return np.floor(2 * np.log(sprice) / np.log(cls.tick_base))
+    def _liquidity_from_mv(self, state):
+        sqprice = self.clip(state)
+        # # sqprice = np.sqrt(state.token0Price)
+        # var = sqprice / self.sqp_u + self.sqp_l / sqprice
+        # rel = 4*(1 - self.sqp_l / self.sqp_u)
+        # coef = var + np.sqrt(var**2 + rel)
+        # coef /= rel
+        #
+        # return coef / sqprice
+        return 1 / 2. / sqprice
 
-    @classmethod
-    def tick_to_sprice(cls, tick):
-        return np.floor(cls.tick_base ** (tick / 2.))
-
-    def _virtual_reserves(self, sprice):
-        # returns: token0_amount, token1_amount
-        sprice = np.clip(sprice, self.sqp_l, self.sqp_u)
-        token0 = self.L / sprice
-        token1 = self.L * sprice
-        return token0, token1
-
-    def _real_reserves(self, sprice):
-        token0, token1 = self._virtual_reserves(sprice)
-        return token0 - self.L / self.sqp_u, token1 - self.L * self.sqp_l
-
-    @staticmethod
-    def liquidity_from_mv(state, mv):
+    def clip(self, state):
         sqprice = np.sqrt(state.token0Price)
-        # sqprice = np.clip(sqprice, self.sqp_l, self.sqp_u)
-        return mv / 2. / sqprice
+        return np.clip(sqprice, self.sqp_l, self.sqp_u)
+
+    def virtual_reserves(self, state):
+        sqprice = self.clip(state)
+        return self.L / sqprice, self.L * sqprice
+
+    def real_reserves(self, state):
+        t0, t1 = self.virtual_reserves(state)
+        return t0 - self.L / self.sqp_u, t1 - self.L * self.sqp_l
 
 
 @dataclass
@@ -160,7 +150,7 @@ class Position:
 
 class Portfolio:
 
-    def __init__(self, balancer, cash: Cash, positions: List[Position]):
+    def __init__(self, balancer, positions: List[Position], cash: Cash = Cash()):
         self.cash_pool = cash
         self._portfolio = positions
         self.logger = defaultdict(list)
@@ -184,11 +174,12 @@ class Portfolio:
         cash = 0
         for position in self._portfolio:
             val = position.value(state)
-            self.logger[f'{position.tag}_last_val'] = [val]
+            self.logger['summary'].append((f'{position.tag}_last_val', val))
             cash += val
 
         self.cash_pool.step(state, cash)
-        self.logger['total_value'] = [self.cash_pool.value(state)]
+        self.logger['summary'].append(('total_value', self.cash_pool.value(state)))
+        self.logger['summary'].append(('discounted_value', sum(self.cash_pool.payments)))
 
     def rollout(self, runner):
         last_state = None
@@ -200,13 +191,8 @@ class Portfolio:
     @property
     def summary(self):
         for k, v in self.logger.items():
-            if len(v) == 1:
-                print(f'{k} = {v.pop()}')
-        try:
-            import pandas as pd
-            return pd.DataFrame({k: v for k, v in self.logger.items() if len(v) == len(self.logger['payments'])})
-        except ImportError:
-            print('Omitting usage of pandas')
-            return self.logger
+            if k == 'summary':
+                [print(t, x) for t, x in v]
+        return pd.DataFrame({k: v for k, v in self.logger.items() if k != 'summary'})
 
 

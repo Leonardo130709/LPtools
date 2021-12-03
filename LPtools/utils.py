@@ -24,7 +24,7 @@ class Adapter:
 
     def get_pool(self, days):
         df = self.client.poolDayData(self.pool_id, limit=days)
-        df['relative_price'] = df.token0Price / df.token1Price
+        # df['relative_price'] = df.token0Price / df.token1Price
         return df[::-1]
 
     def get_mark_prices(self, days):
@@ -49,3 +49,23 @@ class Adapter:
             if df is not None:
                 state = state.merge(df, left_index=True, right_index=True)
         return state
+
+
+class Runner:
+    def __init__(self, data, portfolios):
+        self._data = data
+        self._portfolios = portfolios
+        self.results = []
+
+    def _run(self, portfolio):
+        runner = self._data.itertuples()
+        _ = next(runner)  # already initialized
+        portfolio.rollout(runner)
+        return portfolio.logger
+
+    def run(self):
+        for portfolio in self._portfolios:
+            self.results.append(self._run(portfolio))
+
+    def summary(self, idx):
+        return self._portfolios[idx].summary
