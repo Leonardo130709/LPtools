@@ -52,7 +52,7 @@ class PerpetHedger(BaseBalancer):
         sprice = np.sqrt(state.token0Price)
         if self._t == 0:
             if self.sqp_l < sprice < self.sqp_u:
-                new_amount = 1 / sprice * self.L
+                new_amount = self.L / sprice
             else:
                 new_amount = 0
             costs += self.perpet.rebalance(new_amount)
