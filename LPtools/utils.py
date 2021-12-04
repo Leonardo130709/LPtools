@@ -67,7 +67,17 @@ class Runner:
         for portfolio in self._portfolios:
             self.results.append(self._run(portfolio))
 
-    def summary(self, idx):
-        return self._portfolios[idx].summary
+    def logs(self, idx):
+        return self._portfolios[idx].summary[1]
+
+    @property
+    def summary(self):
+        df = pd.DataFrame()
+        index = []
+        for i, portfolio in enumerate(self._portfolios):
+            df = df.append(portfolio.summary[0])
+            index.append(f'portfolio {i}')
+        df.index = index
+        return df[['total_value', 'discounted_value']]
 
 

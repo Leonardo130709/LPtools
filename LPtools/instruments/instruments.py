@@ -160,7 +160,9 @@ class Portfolio:
         cash_flow = 0
 
         for position in self._portfolio:
-            self.logger[position.tag].append(position.instrument.value(state))
+            self.logger[f'{position.tag}_value'].append(position.instrument.value(state))
+            self.logger[f'{position.tag}_amount'].append(position.amount)
+
             cash_flow += position.step(state)
 
         costs = self.balancer.rebalance(state)
@@ -192,7 +194,8 @@ class Portfolio:
     def summary(self):
         for k, v in self.logger.items():
             if k == 'summary':
-                [print(t, x) for t, x in v]
-        return pd.DataFrame({k: v for k, v in self.logger.items() if k != 'summary'})
+                df = pd.DataFrame.from_records(self.logger['summary']).set_index(0).T
+                #[print(t, x) for t, x in v]
+        return df, pd.DataFrame({k: v for k, v in self.logger.items() if k != 'summary'})
 
 

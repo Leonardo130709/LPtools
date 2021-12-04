@@ -7,9 +7,11 @@ from scipy.optimize import differential_evolution, Bounds
 
 
 class Solver:
-    def __init__(self):
+    def __init__(self, data=None):
         self.alpha = None
         self.sigma = None
+        if data is not None:
+            self.fit(data)
 
     def fit(self, values, from_df=True):
         if from_df:
@@ -20,7 +22,7 @@ class Solver:
         self.alpha = mu + sigma ** 2 / 2
         self.sigma = sigma
 
-    def generator(self, t, N=500):
+    def generator(self, t, N=100):
         """
         dp = \alpha p dt + \sigma p d W_t
         """
@@ -66,7 +68,7 @@ class Solver:
         # values = sp / (np.sqrt(x[1]) + 1e-10) + np.sqrt(x[0]) / sp
         return values  # values.mean(axis=1).sum()
 
-    def solve(self, t, delta1, q1, delta2, q2):
+    def solve(self, t, delta1, q1, delta2, q2, verbose=True):
         f1 = partial(self.first_type_constrain, t=t, q=q1)
         f2 = partial(self.second_type_constrain, t=t, q=q2)
         c1 = NonlinearConstraint(f1, -1, delta1)
@@ -76,8 +78,8 @@ class Solver:
         return differential_evolution(
             f, 2 * ((0., 2.),),
             constraints=[c1, c2, c3],
-            maxiter=3, popsize=30,
-            polish=True, disp=True
+            maxiter=10, popsize=30,
+            polish=False, disp=verbose
         )
 
     @staticmethod
