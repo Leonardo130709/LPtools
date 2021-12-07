@@ -1,5 +1,6 @@
 from .clients import Client
 import pandas as pd
+from copy import copy
 
 
 class Adapter:
@@ -54,7 +55,7 @@ class Adapter:
 class Runner:
     def __init__(self, data, portfolios):
         self._data = data
-        self._portfolios = portfolios
+        self._portfolios = copy(portfolios)
         self.results = []
 
     def _run(self, portfolio):

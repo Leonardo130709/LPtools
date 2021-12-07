@@ -2,8 +2,11 @@ import requests
 import os
 import hmac
 import pandas as pd
-from dotenv import load_dotenv
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    print('Skipping dotenv')
 
 
 class BinanceClient:

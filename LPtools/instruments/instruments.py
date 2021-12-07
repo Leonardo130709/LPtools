@@ -4,6 +4,7 @@ from typing import List
 from collections import defaultdict
 from dataclasses import dataclass
 import pandas as pd
+from copy import copy
 
 
 class Instrument(ABC):
@@ -26,7 +27,7 @@ class Instrument(ABC):
 class Cash:
     def __init__(self, initial_value: float = 0):
         self._value = initial_value
-        self.payments = []
+        self.payments = list()
         self.df = 1
 
     def __add__(self, v):
@@ -39,7 +40,7 @@ class Cash:
     def step(self, state, value):
         self.df *= np.exp(-state.risk_free_rate / 360. / 100.)
         self._value += value
-        self.payments.append(value * self.df)  # here we can get payments
+        self.payments.append(value * self.df)
 
     def __repr__(self):
         return self._value.__repr__()
@@ -137,10 +138,11 @@ class Position:
 
     def value(self, state):
         self.last_value = self.instrument.value(state)
-        return self.amount * self.last_value
+        return self.last_value * self.amount
 
     def rebalance(self, new_amount):
-        diff, self.amount = new_amount - self.amount, new_amount
+        diff = new_amount - self.amount
+        self.amount = new_amount
         fees = -abs(diff * self.last_value * self.transaction_fees)
         return fees
 
@@ -150,38 +152,46 @@ class Position:
 
 class Portfolio:
 
-    def __init__(self, balancer, positions: List[Position], cash: Cash = Cash()):
-        self.cash_pool = cash
-        self._portfolio = positions
+    def __init__(self, balancer, positions: List[Position]):
+        self.cash_pool = Cash()
+        self._portfolio = copy(positions)
         self.logger = defaultdict(list)
-        self.balancer = balancer
+        self.balancer = copy(balancer)
 
     def step(self, state):
         cash_flow = 0
 
         for position in self._portfolio:
-            self.logger[f'{position.tag}_value'].append(position.instrument.value(state))
-            self.logger[f'{position.tag}_amount'].append(position.amount)
-
             cash_flow += position.step(state)
 
         costs = self.balancer.rebalance(state)
 
+        for position in self._portfolio:
+            self.logger[f'{position.tag}_value'].append(position.instrument.value(state))
+            self.logger[f'{position.tag}_amount'].append(position.amount)
+
         self.logger['payments'].append(cash_flow)
         self.logger['transaction_costs'].append(costs)
+        self.logger['total_value'].append(self.value(state))
 
-        self.cash_pool.step(state, cash_flow + costs)
+        total = cash_flow + costs
+        self.cash_pool.step(state, total)
+        return total
+
+    def value(self, state):
+        return sum([position.value(state) for position in self._portfolio])
 
     def finalize(self, state):
         cash = 0
         for position in self._portfolio:
-            val = position.value(state)
+            val = position.value(state)  # sell position
             self.logger['summary'].append((f'{position.tag}_last_val', val))
             cash += val
 
         self.cash_pool.step(state, cash)
         self.logger['summary'].append(('total_value', self.cash_pool.value(state)))
         self.logger['summary'].append(('discounted_value', sum(self.cash_pool.payments)))
+        return cash
 
     def rollout(self, runner):
         last_state = None
@@ -197,5 +207,8 @@ class Portfolio:
                 df = pd.DataFrame.from_records(self.logger['summary']).set_index(0).T
                 #[print(t, x) for t, x in v]
         return df, pd.DataFrame({k: v for k, v in self.logger.items() if k != 'summary'})
+
+    def __len__(self):
+        return len(self._portfolio)
 
 

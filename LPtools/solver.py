@@ -2,8 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from statsmodels.api import OLS
 from functools import partial
-from scipy.optimize import NonlinearConstraint, minimize, LinearConstraint
-from scipy.optimize import differential_evolution, Bounds
+from scipy.optimize import NonlinearConstraint
+from scipy.optimize import differential_evolution
 
 
 class Solver:
@@ -59,14 +59,15 @@ class Solver:
         return np.quantile(values, q)
 
     def objective(self, x, t):
-        f = lambda p: p
-        samples = self.estimate_rv(f, t)
+        samples = self.estimate_rv(lambda p: p, t)
         values = np.where((x[0] < samples) & (samples < x[1]), 1, 0)
         values = - values.mean(0).sum()
-        # may not give the right direction for the iterative method cause of discrete reward
+        # may not give the right direction for the iterative method cause of the discrete reward
+        # use instead:
         # sp = np.sqrt(samples)
         # values = sp / (np.sqrt(x[1]) + 1e-10) + np.sqrt(x[0]) / sp
-        return values  # values.mean(axis=1).sum()
+        # values = values.mean(axis=1).sum()
+        return values
 
     def solve(self, t, delta1, q1, delta2, q2, verbose=True):
         f1 = partial(self.first_type_constrain, t=t, q=q1)
