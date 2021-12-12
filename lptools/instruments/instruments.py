@@ -4,7 +4,7 @@ from typing import List
 from collections import defaultdict
 from dataclasses import dataclass
 import pandas as pd
-from copy import copy
+from copy import deepcopy
 
 
 class Instrument(ABC):
@@ -90,12 +90,11 @@ class UniPool(Instrument):
         self.sqp_u = np.sqrt(price_upper)
         self.sqp_l = np.sqrt(price_lower)
 
-        self.L = self._liquidity_from_mv(init_state) # liquidity per 1$, it's ok since payments/values are linear in L
+        self.L = self._liquidity_from_mv(init_state) # liquidity per 1$, it's ok since payments&values are linear in L
         self.fees = fees  # fee
 
     def value(self, state):
-        # market relative price of tokens \sim pool_value -- assumption of the ultimate arbitrage
-        t0, t1 = self.virtual_reserves(state)
+        t0, t1 = self.real_reserves(state)
         return t0*state.token0Price + t1
 
     def step(self, state):
@@ -106,14 +105,10 @@ class UniPool(Instrument):
 
     def _liquidity_from_mv(self, state):
         sqprice = self.clip(state)
-        # # sqprice = np.sqrt(state.token0Price)
-        # var = sqprice / self.sqp_u + self.sqp_l / sqprice
-        # rel = 4*(1 - self.sqp_l / self.sqp_u)
-        # coef = var + np.sqrt(var**2 + rel)
-        # coef /= rel
-        #
-        # return coef / sqprice
-        return 1 / 2. / sqprice
+        var = sqprice / self.sqp_u + self.sqp_l / sqprice
+        denominator = 2 * sqprice * (1 - var / 2)
+        return 1 / denominator
+        # return 1 / 2. / sqprice # corresponds to uni v2
 
     def clip(self, state):
         sqprice = np.sqrt(state.token0Price)
@@ -143,10 +138,11 @@ class Position:
     def rebalance(self, new_amount):
         diff = new_amount - self.amount
         self.amount = new_amount
-        fees = -abs(diff * self.last_value * self.transaction_fees)
+        fees = -abs(diff * self.last_value) * self.transaction_fees
         return fees
 
     def step(self, state):
+        _ = self.value(state)
         return self.amount * self.instrument.step(state)
 
 
@@ -154,9 +150,10 @@ class Portfolio:
 
     def __init__(self, balancer, positions: List[Position]):
         self.cash_pool = Cash()
-        self._portfolio = copy(positions)
+        self._portfolio = deepcopy(positions)
         self.logger = defaultdict(list)
-        self.balancer = copy(balancer)
+        self.balancer = deepcopy(balancer)
+        self.min_value = np.inf
 
     def step(self, state):
         cash_flow = 0
@@ -167,19 +164,25 @@ class Portfolio:
         costs = self.balancer.rebalance(state)
 
         for position in self._portfolio:
-            self.logger[f'{position.tag}_value'].append(position.instrument.value(state))
+            self.logger[f'{position.tag}_DV'].append(position.last_value)
             self.logger[f'{position.tag}_amount'].append(position.amount)
+            self.logger[f'{position.tag}_present_value'].append(position.value(state))
 
         self.logger['payments'].append(cash_flow)
         self.logger['transaction_costs'].append(costs)
-        self.logger['total_value'].append(self.value(state))
+        self.logger['cumulative_payments'].append(sum(self.cash_pool.payments))
+        self.logger['in_cash'].append(self.cash_pool.value(state))
+
+        total_value = self.value(state)
+        self.min_value = min(self.min_value, total_value)
+        self.logger['total_value'].append(total_value)
 
         total = cash_flow + costs
         self.cash_pool.step(state, total)
         return total
 
     def value(self, state):
-        return sum([position.value(state) for position in self._portfolio])
+        return sum([position.value(state) for position in self._portfolio]) + self.cash_pool.value(state)
 
     def finalize(self, state):
         cash = 0
@@ -189,8 +192,10 @@ class Portfolio:
             cash += val
 
         self.cash_pool.step(state, cash)
+        self.min_value = min(self.min_value, self.cash_pool.value(state))
         self.logger['summary'].append(('total_value', self.cash_pool.value(state)))
         self.logger['summary'].append(('discounted_value', sum(self.cash_pool.payments)))
+        self.logger['summary'].append(('min_value', self.min_value))
         return cash
 
     def rollout(self, runner):
@@ -205,7 +210,6 @@ class Portfolio:
         for k, v in self.logger.items():
             if k == 'summary':
                 df = pd.DataFrame.from_records(self.logger['summary']).set_index(0).T
-                #[print(t, x) for t, x in v]
         return df, pd.DataFrame({k: v for k, v in self.logger.items() if k != 'summary'})
 
     def __len__(self):

@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List
 from .instruments import Position, Perpetual, UniPool, Bond
 import numpy as np
+from copy import deepcopy
 
 
 class BaseBalancer(ABC):
@@ -9,7 +10,7 @@ class BaseBalancer(ABC):
 
     def __init__(self, positions: List[Position], initial_amounts=None):
         self._validate_inputs(positions, initial_amounts)
-        self.positions = positions
+        self.positions = deepcopy(positions)
         self._init = True
         self.initial_amounts = initial_amounts
 
@@ -41,7 +42,7 @@ class PerpetHedger(BaseBalancer):
 
     def __init__(self, postitions, initial_amounts, rebalancing_interval):
         super().__init__(postitions, initial_amounts=initial_amounts)
-        self.pool, self.perpet, *self.unmanaged = postitions
+        self.pool, self.perpet, *self.unmanaged = deepcopy(postitions)
         self.period = rebalancing_interval
         self._t = 1
         self.L, self.sqp_l, self.sqp_u = \
@@ -52,7 +53,7 @@ class PerpetHedger(BaseBalancer):
         sprice = np.sqrt(state.token0Price)
         if self._t == 0:
             if self.sqp_l < sprice < self.sqp_u:
-                new_amount = - self.L / sprice
+                new_amount = - self.L * (1 / sprice - 1 / self.sqp_u)
             else:
                 new_amount = 0
             costs += self.perpet.rebalance(new_amount)

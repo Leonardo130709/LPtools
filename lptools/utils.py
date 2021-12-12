@@ -1,6 +1,6 @@
 from .clients import Client
 import pandas as pd
-from copy import copy
+from copy import copy, deepcopy
 
 
 class Adapter:
@@ -67,7 +67,7 @@ class Adapter:
 class Runner:
     def __init__(self, data, portfolios):
         self._data = data
-        self._portfolios = copy(portfolios)
+        self._portfolios = deepcopy(portfolios)
         self.results = []
 
     def _run(self, portfolio):
@@ -91,6 +91,6 @@ class Runner:
             df = df.append(portfolio.summary[0])
             index.append(f'portfolio {i}')
         df.index = index
-        return df[['total_value', 'discounted_value']]
+        return df[['total_value', 'discounted_value', 'min_value']]
 
 

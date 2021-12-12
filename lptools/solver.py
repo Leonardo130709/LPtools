@@ -4,33 +4,36 @@ from statsmodels.api import OLS
 from functools import partial
 from scipy.optimize import NonlinearConstraint
 from scipy.optimize import differential_evolution
+from scipy.stats import norm
 
 
 class Solver:
-    def __init__(self, data=None):
+    def __init__(self, data=None, dist=norm()):
         self.alpha = None
         self.sigma = None
         if data is not None:
             self.fit(data)
+        self.N = 100
+        self.dist = dist
 
     def fit(self, values, from_df=True):
         if from_df:
             values = self.preproc(values)
         result = OLS(values, np.arange(len(values)))
         result = result.fit()
-        mu, sigma = result.params[0], result.scale
-        self.alpha = mu + sigma ** 2 / 2
-        self.sigma = sigma
+        mu, var = result.params[0], result.scale
+        self.alpha = mu + var / 2
+        self.sigma = np.sqrt(var)
 
-    def generator(self, t, N=150):
+    def generator(self, t):
         """
         dp = \alpha p dt + \sigma p d W_t
         """
         paths = []
-        for _ in range(N):
+        for _ in range(self.N):
             path = [1.]
             for _ in range(t):
-                p = path[-1] * (1 + self.alpha + self.sigma * np.random.randn())
+                p = path[-1] * (1 + self.alpha + self.sigma * self.dist.rvs())
                 path.append(p)
             paths.append(path)
         return np.array(paths)
@@ -60,14 +63,13 @@ class Solver:
 
     def objective(self, x, t):
         samples = self.estimate_rv(lambda p: p, t)
-        values = np.where((x[0] < samples) & (samples < x[1]), 1, 0)
-        values = - values.mean(0).sum()
-        # may not give the right direction for the iterative method cause of the discrete reward
-        # use instead:
-        # sp = np.sqrt(samples)
+        sp = np.sqrt(samples)
+        var = (sp / np.sqrt(x[1]) + np.sqrt(x[0]) / sp) / 2
+        values = 1 / (1 - var) / sp
+        values = np.where((x[0] < samples) & (samples < x[1]), values, 0)
         # values = sp / (np.sqrt(x[1]) + 1e-10) + np.sqrt(x[0]) / sp
-        # values = values.mean(axis=1).sum()
-        return values
+        values = values.mean(axis=0).sum()
+        return -values
 
     def solve(self, t, delta1, q1, delta2, q2, verbose=True, maxiter=30, popsize=50):
         f1 = partial(self.first_type_constrain, t=t, q=q1)
@@ -86,9 +88,8 @@ class Solver:
 
     @staticmethod
     def preproc(df):
-        p = df.token0Price.values
-        p = p / p[0]
-        p = np.log(p)
+        p = df.token0Price
+        p = np.log(p).diff().dropna().values
         return p
 
     @staticmethod
