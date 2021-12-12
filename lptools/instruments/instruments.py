@@ -150,9 +150,9 @@ class Portfolio:
 
     def __init__(self, balancer, positions: List[Position]):
         self.cash_pool = Cash()
-        self._portfolio = deepcopy(positions)
+        self._portfolio = positions
         self.logger = defaultdict(list)
-        self.balancer = deepcopy(balancer)
+        self.balancer = balancer
         self.min_value = np.inf
 
     def step(self, state):

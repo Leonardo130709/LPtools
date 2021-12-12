@@ -10,7 +10,7 @@ class BaseBalancer(ABC):
 
     def __init__(self, positions: List[Position], initial_amounts=None):
         self._validate_inputs(positions, initial_amounts)
-        self.positions = deepcopy(positions)
+        self.positions = positions
         self._init = True
         self.initial_amounts = initial_amounts
 
@@ -42,7 +42,7 @@ class PerpetHedger(BaseBalancer):
 
     def __init__(self, postitions, initial_amounts, rebalancing_interval):
         super().__init__(postitions, initial_amounts=initial_amounts)
-        self.pool, self.perpet, *self.unmanaged = deepcopy(postitions)
+        self.pool, self.perpet, *self.unmanaged = postitions
         self.period = rebalancing_interval
         self._t = 1
         self.L, self.sqp_l, self.sqp_u = \

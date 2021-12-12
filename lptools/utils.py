@@ -67,7 +67,7 @@ class Adapter:
 class Runner:
     def __init__(self, data, portfolios):
         self._data = data
-        self._portfolios = deepcopy(portfolios)
+        self._portfolios = portfolios
         self.results = []
 
     def _run(self, portfolio):
