@@ -50,12 +50,9 @@ class PerpetHedger(BaseBalancer):
 
     def rebalance(self, state):
         costs = super().rebalance(state)
-        sprice = np.sqrt(state.token0Price)
+        sprice = np.clip(np.sqrt(state.token0Price), self.sqp_l, self.sqp_u)
         if self._t == 0:
-            if self.sqp_l < sprice < self.sqp_u:
-                new_amount = - self.L * (1 / sprice - 1 / self.sqp_u)
-            else:
-                new_amount = 0
+            new_amount = - self.L * (1 / sprice - 1 / self.sqp_u)
             costs += self.perpet.rebalance(new_amount)
 
         self._t = (self._t + 1) % self.period

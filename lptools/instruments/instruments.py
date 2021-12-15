@@ -100,13 +100,13 @@ class UniPool(Instrument):
     def step(self, state):
         sqprice = np.sqrt(state.token0Price)
         indicator = self.sqp_l < sqprice < self.sqp_u
-        return indicator * state.feesUSD * \
+        return self.fees * indicator * state.volumeUSD * \
                     (self.L / state.liquidity)  # can be replaced by the exact calculation per tick
 
     def _liquidity_from_mv(self, state):
         sqprice = self.clip(state)
         var = sqprice / self.sqp_u + self.sqp_l / sqprice
-        denominator = 2 * sqprice * (1 - var / 2)
+        denominator = 2 * sqprice * (1 - var / 2) # this only holds if p_- < p < p_+
         return 1 / denominator
         # return 1 / 2. / sqprice # corresponds to uni v2
 
