@@ -16,12 +16,14 @@ class BaseBalancer(ABC):
 
     @abstractmethod
     def rebalance(self, state: 'MarketState') -> float:
-        costs = 0
+        costs, cash = 0, 0
         if self._init:
             for p, a in zip(self.positions, self.initial_amounts):
-                costs += p.rebalance(a)
+                pos_cost, pos_cash = p.rebalance(a)
+                costs += pos_cost
+                cash += pos_cash
             self._init = False
-        return costs
+        return costs, cash
 
     @classmethod
     def _validate_inputs(cls, positions, initial_amounts):
@@ -49,12 +51,14 @@ class PerpetHedger(BaseBalancer):
             map(lambda atr: getattr(self.pool.instrument, atr), ('L', 'sqp_l', 'sqp_u'))
 
     def rebalance(self, state):
-        costs = super().rebalance(state)
+        costs, cash = super().rebalance(state)
         sprice = np.clip(np.sqrt(state.token0Price), self.sqp_l, self.sqp_u)
         if self._t == 0:
             new_amount = - self.L * (1 / sprice - 1 / self.sqp_u)
-            costs += self.perpet.rebalance(new_amount)
+            p_cost, p_cash = self.perpet.rebalance(new_amount)
+            costs += p_cost
+            cash += p_cash
 
         self._t = (self._t + 1) % self.period
 
-        return costs
+        return costs, cash

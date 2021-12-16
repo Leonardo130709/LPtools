@@ -70,10 +70,10 @@ class Bond(Instrument):
 class Perpetual(Instrument):
 
     def value(self, state):
-        return state.token0Price
+        return state.Open
 
     def step(self, state):
-        return - state.fundingRate * (state.token0Price - state.mark)
+        return - state.fundingRate * (state.Open - state.mark)
 
 
 class UniPool(Instrument):
@@ -100,8 +100,19 @@ class UniPool(Instrument):
     def step(self, state):
         sqprice = np.sqrt(state.token0Price)
         indicator = self.sqp_l < sqprice < self.sqp_u
-        return self.fees * indicator * state.volumeUSD * \
+        # it is easier to use feesUSD than fees * volumeUSD
+        return state.feesUSD * indicator * \
                     (self.L / state.liquidity)  # can be replaced by the exact calculation per tick
+
+    # def step(self, state):
+    #     """
+    #     Alternative fees computation based on the given formula
+    #     """
+    #     coef = 0.0000000576975945
+    #     sqprice = np.sqrt(state.token0Price)
+    #     indicator = self.sqp_l < sqprice < self.sqp_u
+    #     return coef*state.tvlUSD*indicator / (???)
+
 
     def _liquidity_from_mv(self, state):
         sqprice = self.clip(state)
@@ -138,8 +149,9 @@ class Position:
     def rebalance(self, new_amount):
         diff = new_amount - self.amount
         self.amount = new_amount
-        fees = -abs(diff * self.last_value) * self.transaction_fees
-        return fees
+        cash = -diff*self.last_value
+        fees = -abs(cash) * self.transaction_fees
+        return fees, cash
 
     def step(self, state):
         _ = self.value(state)
@@ -161,24 +173,25 @@ class Portfolio:
         for position in self._portfolio:
             cash_flow += position.step(state)
 
-        costs = self.balancer.rebalance(state)
+        costs, cash = self.balancer.rebalance(state)
+        cash_flow += cash
 
         for position in self._portfolio:
             self.logger[f'{position.tag}_DV'].append(position.last_value)
             self.logger[f'{position.tag}_amount'].append(position.amount)
             self.logger[f'{position.tag}_present_value'].append(position.value(state))
 
-        self.logger['payments'].append(cash_flow)
-        self.logger['transaction_costs'].append(costs)
-        self.logger['cumulative_payments'].append(sum(self.cash_pool.payments))
-        self.logger['in_cash'].append(self.cash_pool.value(state))
-
-        total_value = self.value(state)
-        self.min_value = min(self.min_value, total_value)
-        self.logger['total_value'].append(total_value)
 
         total = cash_flow + costs
         self.cash_pool.step(state, total)
+        total_value = self.value(state)
+        self.min_value = min(self.min_value, total_value)
+        self.logger['cumulative_payments'].append(sum(self.cash_pool.payments))
+        self.logger['in_cash'].append(self.cash_pool.value(state))
+        self.logger['payments'].append(cash_flow)
+        self.logger['transaction_costs'].append(costs)
+        self.logger['total_value'].append(total_value)
+
         return total
 
     def value(self, state):
