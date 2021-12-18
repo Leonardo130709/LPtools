@@ -49,13 +49,13 @@ class Solver:
             plt.plot(path)
         plt.show()
 
-    def first_type_constrain(self, x, t, q):
+    def first_type_constraint(self, x, t, q):
         f = partial(self.IL, pl=x[0], pu=x[1])
         samples = self.estimate_rv(f, t)
         values = samples[:, -1]
         return np.quantile(values, q)
 
-    def second_type_constrain(self, x, t, q):
+    def second_type_constraint(self, x, t, q):
         f = partial(self.IL, pl=x[0], pu=x[1])
         samples = self.estimate_rv(f, t)
         values = samples.max(axis=1)
@@ -72,8 +72,8 @@ class Solver:
         return -values
 
     def solve(self, t, delta1, q1, delta2, q2, verbose=True, maxiter=30, popsize=50):
-        f1 = partial(self.first_type_constrain, t=t, q=q1)
-        f2 = partial(self.second_type_constrain, t=t, q=q2)
+        f1 = partial(self.first_type_constraint, t=t, q=q1)
+        f2 = partial(self.second_type_constraint, t=t, q=q2)
         c1 = NonlinearConstraint(f1, -1, delta1)
         c2 = NonlinearConstraint(f2, -1, delta2)
         c3 = NonlinearConstraint(lambda x: x[1] - x[0], 0, np.inf)

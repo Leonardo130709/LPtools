@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Tuple
 from .instruments import Position, Perpetual, UniPool, Bond
 import numpy as np
-from copy import deepcopy
 
 
 class BaseBalancer(ABC):
@@ -15,7 +14,7 @@ class BaseBalancer(ABC):
         self.initial_amounts = initial_amounts
 
     @abstractmethod
-    def rebalance(self, state: 'MarketState') -> float:
+    def rebalance(self, state: 'MarketState') -> Tuple[float, float]:
         costs, cash = 0, 0
         if self._init:
             for p, a in zip(self.positions, self.initial_amounts):

@@ -4,7 +4,6 @@ from typing import List
 from collections import defaultdict
 from dataclasses import dataclass
 import pandas as pd
-from copy import deepcopy
 
 
 class Instrument(ABC):
