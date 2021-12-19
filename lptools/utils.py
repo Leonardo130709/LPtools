@@ -91,7 +91,7 @@ class Runner:
             df = df.append(portfolio.summary[0])
             index.append(f'portfolio {i}')
         df.index = index
-        return df[['total_value', 'discounted_value', 'min_value']]  #, 'annual_return']]
+        return df[['total_value', 'discounted_value', 'min_value', 'annual_return']]
 
 
     def plot_tv(self):
