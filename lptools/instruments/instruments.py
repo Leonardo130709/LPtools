@@ -180,7 +180,6 @@ class Portfolio:
             self.logger[f'{position.tag}_amount'].append(position.amount)
             self.logger[f'{position.tag}_present_value'].append(position.value(state))
 
-
         total = cash_flow + costs
         self.cash_pool.step(state, total)
         total_value = self.value(state)
@@ -208,6 +207,8 @@ class Portfolio:
         self.logger['summary'].append(('total_value', self.cash_pool.value(state)))
         self.logger['summary'].append(('discounted_value', sum(self.cash_pool.payments)))
         self.logger['summary'].append(('min_value', self.min_value))
+        annual_return = (1 + self.cash_pool.value(state))**(360 / len(self.cash_pool.payments)) - 1
+        self.logger['summary'].append(('annual_return', annual_return))
         return cash
 
     def rollout(self, runner):

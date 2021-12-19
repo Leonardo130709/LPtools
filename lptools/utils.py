@@ -1,5 +1,6 @@
 from .clients import Client
 import pandas as pd
+import matplotlib.pyplot as plt
 
 
 class Adapter:
@@ -90,6 +91,17 @@ class Runner:
             df = df.append(portfolio.summary[0])
             index.append(f'portfolio {i}')
         df.index = index
-        return df[['total_value', 'discounted_value', 'min_value']]
+        return df[['total_value', 'discounted_value', 'min_value']]  #, 'annual_return']]
+
+
+    def plot_tv(self):
+        plt.figure(figsize=(8, 4))
+        for i, result in enumerate(self.results):
+            plt.plot(result['total_value'], label=f'portfolio {i}')
+        plt.title('Total value of portfolio')
+        plt.xlabel('T, days')
+        plt.ylabel('% change')
+        plt.legend()
+        plt.show()
 
 
